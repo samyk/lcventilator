@@ -13,29 +13,28 @@ BOM:
 
 
 TODO:
-- DONE add motor control
 - should there be a delay before actuating?
 - should there be a delay after actuating?
-- DONE support l293d
-- DONE read inputs
-- DONE control motor based of inputs
 - support duty cycle of motor
-- detect how long actuation takes to calculate rate properly
 - schematic
-- adjustable pot values based on resistance value
 - add lcd display
 - display to lcd
   - display rate 1-40
-  - dsplay volume 1-750
-- support diff boards
-  - uno
-  - mega
-- other motor drivers?
+  - display volume 1-750
 - resolve any warnings
+- DONE add motor control
+- DONE support l293d
+- DONE read inputs
+- DONE control motor based of inputs
+- DONE only change values after a full cycle
+- DONE detect how long actuation takes to calculate rate properly
+- DONE support diff boards
 
 */
 
+// leave on to get serial output
 #define DEBUG
+#define SERIAL_SPEED 9600
 
 /////////////////////////////
 ////     PINS
@@ -56,8 +55,15 @@ TODO:
 #define DELAY_AFTER_ACTUATING_MS  10
 #define MAX_DUTY_CYCLE_PERCENT 10 // my linear actuator says 10%
 
+// motor control speed (pwm value)
+#define MIN_SPEED   0
+#define MAX_SPEED 255
+
+// analogRead range on analog pins
 #define MIN_ANALOG_VALUE    0
 #define MAX_ANALOG_VALUE 1023
+
+///////////////////////////////////////////////////////////////////////
 
 #ifdef DEBUG
 #define d(...)   Serial.print(__VA_ARGS__)
@@ -67,18 +73,20 @@ TODO:
 #define dln(...) (void)0
 #endif
 
-unsigned int cycles_input = 0, cycles_per_min = 0, actuator_input = 0;
+unsigned int cycles_input = 0, cycles_per_min = 0, actuator_input = 0, speed;
+unsigned long start_time;
+bool last_direction;
 
 // milliseconds per cycle
 #define CYCLE_MS (((long)60 * 1000) / cycles_per_min)
 
 // which side of the breath we're in
-#define DIRECTION ((millis() % CYCLE_MS) / (CYCLE_MS / 2))
+#define DIRECTION (((millis() - start_time) % CYCLE_MS) / (CYCLE_MS / 2))
 
 void setup()
 {
 #ifdef DEBUG
-  Serial.begin(9600);
+  Serial.begin(SERIAL_SPEED);
 #endif
 
   // pot pins
@@ -89,15 +97,21 @@ void setup()
   pinMode(MOTOR_ENABLE_PIN, OUTPUT);
   pinMode(MOTOR_IN1_PIN, OUTPUT);
   pinMode(MOTOR_IN2_PIN, OUTPUT);
+
+  // get initial values
+  readInputs();
 }
 
 // read our values, drive motor, display output
 void loop()
 {
-  readInputs();
+  // only read new values once we switch directions
+  bool direction = DIRECTION;
+  if (direction == 0 && last_direction != direction)
+    readInputs();
+  last_direction = direction;
 
-  int speed = analogMap(actuator_input, 255);
-  driveMotor(speed, DIRECTION);
+  driveMotor(speed, direction);
 
   display();
 }
@@ -108,9 +122,13 @@ void loop()
 // grab values from pots and scale
 void readInputs()
 {
+  start_time     = millis();
   actuator_input = analogRead(ACTUATOR_DIST_PIN);
   cycles_input   = analogRead(CYCLES_PER_MIN_PIN);
   cycles_per_min = analogMap(cycles_input, MIN_CYCLES_PER_MIN, MAX_CYCLES_PER_MIN);
+  speed          = analogMap(actuator_input, MIN_SPEED, MAX_SPEED);
+
+  dln("read inputs");
 }
 
 // display to LCD
