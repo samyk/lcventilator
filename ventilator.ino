@@ -1,34 +1,16 @@
 /*
 
-Low cost ventilator based on Dr. Jeff Ebin's design
+Low cost ventilator based on Dr. Jeffrey Ebin's design
 
 -samy kamkar
 2020/03/20
-
-BOM:
-- MCU (widely optional, most Arduinos [Uno, Mega, Nano, etc], Teensy, etc)
-- motor (linear actuator)
-- motor driver (eg L293D)
-- ...
-
 
 TODO:
 - should there be a delay before actuating?
 - should there be a delay after actuating?
 - support duty cycle of motor
 - schematic
-- DONE add lcd display
-- DONE display to lcd
-  - DONE display rate 1-40
-  - DONE display distance 1-750 (changed to 255)
 - resolve any warnings
-- DONE add motor control
-- DONE support l293d
-- DONE read inputs
-- DONE control motor based of inputs
-- DONE only change values after a full cycle
-- DONE detect how long actuation takes to calculate rate properly
-- DONE support diff boards
 
 */
 
@@ -134,7 +116,6 @@ void loop()
     readInputs();
   last_direction = direction;
 
-  Serial.println("drive");
   driveMotor(speed, direction);
 
   display();
@@ -206,6 +187,12 @@ long analogMap(long input, long from, long to)
 // drive our motor, L293D or similar
 void driveMotor(uint8_t m_speed, bool m_direction)
 {
+  d("speed=");
+  d(m_speed);
+  d(" direction=");
+  d(direction);
+  dln("driving motor");
+  
   analogWrite(MOTOR_ENABLE_PIN, m_speed);
   digitalWrite(MOTOR_IN1_PIN, !m_direction);
   digitalWrite(MOTOR_IN2_PIN,  m_direction);
