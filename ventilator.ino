@@ -17,10 +17,10 @@ TODO:
 - should there be a delay after actuating?
 - support duty cycle of motor
 - schematic
-- add lcd display
-- display to lcd
-  - display rate 1-40
-  - display volume 1-750
+- DONE add lcd display
+- DONE display to lcd
+  - DONE display rate 1-40
+  - DONE display distance 1-750 (changed to 255)
 - resolve any warnings
 - DONE add motor control
 - DONE support l293d
@@ -32,8 +32,8 @@ TODO:
 
 */
 
-// leave on to get serial output
-#define DEBUG
+#define LCD // enable LCD
+//#define DEBUG // enable serial debugging
 #define SERIAL_SPEED 9600
 
 /////////////////////////////
@@ -44,20 +44,28 @@ TODO:
 #define MOTOR_IN1_PIN       9
 #define MOTOR_IN2_PIN      10
 #define MOTOR_ENABLE_PIN   13
-
+#define LCD_RS 12
+#define LCD_EN 11
+#define LCD_D4  5
+#define LCD_D5  4
+#define LCD_D6  3
+#define LCD_D7  2
 
 /////////////////////////////
 ////     VALUES
 /////////////////////////////
 #define MAX_CYCLES_PER_MIN 40
 #define MIN_CYCLES_PER_MIN  1
-#define DELAY_BEFORE_ACTUATING_MS 10
-#define DELAY_AFTER_ACTUATING_MS  10
-#define MAX_DUTY_CYCLE_PERCENT 10 // my linear actuator says 10%
+#define LCD_COLUMNS 16
+#define LCD_ROWS 2
 
 // motor control speed (pwm value)
 #define MIN_SPEED   0
 #define MAX_SPEED 255
+
+// display values of (relative) distance
+#define MIN_DISTANCE   0
+#define MAX_DISTANCE 255
 
 // analogRead range on analog pins
 #define MIN_ANALOG_VALUE    0
@@ -73,12 +81,20 @@ TODO:
 #define dln(...) (void)0
 #endif
 
-unsigned int cycles_input = 0, cycles_per_min = 0, actuator_input = 0, speed;
-unsigned long start_time;
-bool last_direction;
+#ifdef LCD
+#include <LiquidCrystal.h>
+LiquidCrystal lcd(LCD_RS, LCD_EN, LCD_D4, LCD_D5, LCD_D6, LCD_D7);
+#endif
+
+#define BUFFER_SIZE (LCD_COLUMNS+1)
+char buffer[BUFFER_SIZE];
+
+uint16_t cycles_input = 0, cycles_per_min = 0, actuator_input = 0, speed = 0;
+uint32_t start_time;
+bool last_direction, direction;
 
 // milliseconds per cycle
-#define CYCLE_MS (((long)60 * 1000) / cycles_per_min)
+#define CYCLE_MS (((uint32_t)60 * 1000) / cycles_per_min)
 
 // which side of the breath we're in
 #define DIRECTION (((millis() - start_time) % CYCLE_MS) / (CYCLE_MS / 2))
@@ -98,6 +114,13 @@ void setup()
   pinMode(MOTOR_IN1_PIN, OUTPUT);
   pinMode(MOTOR_IN2_PIN, OUTPUT);
 
+#ifdef LCD
+  lcd.begin(LCD_COLUMNS, LCD_ROWS);
+#endif
+
+  lcdClear();
+  lcdPrint("Ventilator On");
+
   // get initial values
   readInputs();
 }
@@ -106,11 +129,12 @@ void setup()
 void loop()
 {
   // only read new values once we switch directions
-  bool direction = DIRECTION;
+  direction = DIRECTION;
   if (direction == 0 && last_direction != direction)
     readInputs();
   last_direction = direction;
 
+  Serial.println("drive");
   driveMotor(speed, direction);
 
   display();
@@ -128,13 +152,23 @@ void readInputs()
   cycles_per_min = analogMap(cycles_input, MIN_CYCLES_PER_MIN, MAX_CYCLES_PER_MIN);
   speed          = analogMap(actuator_input, MIN_SPEED, MAX_SPEED);
 
+  lcdPrint(0, 1, "C");
   dln("read inputs");
 }
 
 // display to LCD
 void display()
 {
-  int rate = analogMap(actuator_input, 0, 750);
+  // read from analog pins because normally we only change values on breath
+  uint8_t tmp_cpm  = analogMap(analogRead(CYCLES_PER_MIN_PIN), MIN_CYCLES_PER_MIN, MAX_CYCLES_PER_MIN);
+  uint8_t tmp_rate = analogMap(analogRead(ACTUATOR_DIST_PIN),  MIN_DISTANCE, MAX_DISTANCE);
+
+  // print to display
+  snprintf(buffer, BUFFER_SIZE, "%c Breath/min: %2d", direction ? '+' : '-', tmp_cpm);
+  lcdPrint(buffer);
+
+  snprintf(buffer, BUFFER_SIZE, "  Distance:  %3d", tmp_rate);
+  lcdPrint(1, buffer);
 
   // debug output to serial (if DEBUG enabled)
   d(millis());
@@ -148,10 +182,14 @@ void display()
   d(CYCLE_MS);
   d(" DIR=");
   d(DIRECTION);
+  d(" speed=");
+  d(speed);
   d(" cpm=");
   d(cycles_per_min);
-  d(" rate=");
-  dln(rate);
+  d(" tcpm=");
+  d(tmp_cpm);
+  d(" trate=");
+  dln(tmp_rate);
 }
 
 // handle analog value mappings
@@ -166,9 +204,46 @@ long analogMap(long input, long from, long to)
 }
 
 // drive our motor, L293D or similar
-void driveMotor(int speed, bool direction)
+void driveMotor(uint8_t m_speed, bool m_direction)
 {
-  analogWrite(MOTOR_ENABLE_PIN, speed);
-  digitalWrite(MOTOR_IN1_PIN, !direction);
-  digitalWrite(MOTOR_IN2_PIN,  direction);
+  analogWrite(MOTOR_ENABLE_PIN, m_speed);
+  digitalWrite(MOTOR_IN1_PIN, !m_direction);
+  digitalWrite(MOTOR_IN2_PIN,  m_direction);
+}
+
+///////////////////////////////////////////////
+// lcd helper functions
+
+// clear lcd
+void lcdClear()
+{
+#ifdef LCD
+  lcd.clear();
+#endif
+}
+
+// default to first column and row
+void lcdPrint(char *buf)
+{
+#ifdef LCD
+  lcdPrint(0, 0, buf);
+#endif
+}
+
+// print to column and row
+void lcdPrint(uint8_t col, uint8_t row, char *buf)
+{
+#ifdef LCD
+  lcd.setCursor(col, row);
+  lcd.print(buf);
+#endif
+}
+
+// default to first column
+void lcdPrint(uint8_t row, char *buf)
+{
+#ifdef LCD
+  lcd.setCursor(0, row);
+  lcd.print(buf);
+#endif
 }
