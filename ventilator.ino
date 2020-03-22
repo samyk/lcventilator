@@ -1,6 +1,10 @@
 /*
 
-Low cost ventilator based on Dr. Jeffrey Ebin's design
+Low cost ventilator based on Dr. Jeffrey Ebin's design.
+
+Supports most low cost MCUs (Arduino Uno, Nano, Mega, Teensy, etc)
+- optional LCD or I2C LCD
+- 2 pots required to control rate + distance
 
 -samy kamkar
 2020/03/20
@@ -15,6 +19,8 @@ TODO:
 */
 
 #define LCD // enable LCD
+//#define LCD_I2C // enable I2C LCD
+
 //#define DEBUG // enable serial debugging
 #define SERIAL_SPEED 9600
 
@@ -26,6 +32,11 @@ TODO:
 #define MOTOR_IN1_PIN       9
 #define MOTOR_IN2_PIN      10
 #define MOTOR_ENABLE_PIN   13
+
+// LCD I2C pins (if LCD_I2C is defined)
+#define LCD_I2C_ADDRESS 0x27
+
+// LCD pins (if LCD is defined)
 #define LCD_RS 12
 #define LCD_EN 11
 #define LCD_D4  5
@@ -36,8 +47,9 @@ TODO:
 /////////////////////////////
 ////     VALUES
 /////////////////////////////
-#define MAX_CYCLES_PER_MIN 40
-#define MIN_CYCLES_PER_MIN  1
+#define DELAY_PER_CYCLE_MS  0 // milliseconds to delay before actuating forward and reverse
+#define MAX_CYCLES_PER_MIN 40 // max full actuations (fwd+back) per minute
+#define MIN_CYCLES_PER_MIN  1 // minimum actuations per minute
 #define LCD_COLUMNS 16
 #define LCD_ROWS 2
 
@@ -55,6 +67,16 @@ TODO:
 
 ///////////////////////////////////////////////////////////////////////
 
+// these must be the same right now unfortunately...
+// need to add support for actually returning at
+// the right speed when coming back if diff speeds
+#define DELAY_PRE_CYCLE_MS DELAY_PER_CYCLE_MS // milliseconds to wait before actuating forward
+#define DELAY_MID_CYCLE_MS DELAY_PER_CYCLE_MS // milliseconds to wait before actuating in reverse
+
+#if defined(LCD) && defined(LCD_I2C)
+#error "define either LCD, LCD_I2C, or neither"
+#endif
+
 #ifdef DEBUG
 #define d(...)   Serial.print(__VA_ARGS__)
 #define dln(...) Serial.println(__VA_ARGS__)
@@ -64,8 +86,17 @@ TODO:
 #endif
 
 #ifdef LCD
+#define _LCD
 #include <LiquidCrystal.h>
 LiquidCrystal lcd(LCD_RS, LCD_EN, LCD_D4, LCD_D5, LCD_D6, LCD_D7);
+#endif
+
+#ifdef LCD_I2C
+#define _LCD
+#include <Wire.h>
+#include <LiquidCrystal_I2C.h>
+#include <LiquidCrystal.h>
+LiquidCrystal_I2C lcd(LCD_I2C_ADDRESS, LCD_COLUMNS, LCD_ROWS);
 #endif
 
 #define BUFFER_SIZE (LCD_COLUMNS+1)
@@ -75,11 +106,15 @@ uint16_t cycles_input = 0, cycles_per_min = 0, actuator_input = 0, speed = 0;
 uint32_t start_time;
 bool last_direction, direction;
 
-// milliseconds per cycle
-#define CYCLE_MS (((uint32_t)60 * 1000) / cycles_per_min)
+// milliseconds per cycle (not including pre/post delay times)
+#define MS_IN_SEC ((uint32_t)60 * 1000)
+#define TOTAL_DELAY_MS (DELAY_PRE_CYCLE_MS + DELAY_MID_CYCLE_MS)
+#define TOTAL_DELAY_MS_PER_MIN (cycles_per_min * TOTAL_DELAY_MS)
+#define CYCLE_MS ((MS_IN_SEC - TOTAL_DELAY_MS_PER_MIN) / cycles_per_min)
+#define CURRENT_TIME_IN_CYCLE ((millis() - start_time) % CYCLE_MS)
 
 // which side of the breath we're in
-#define DIRECTION (((millis() - start_time) % CYCLE_MS) / (CYCLE_MS / 2))
+#define DIRECTION (CURRENT_TIME_IN_CYCLE / ((CYCLE_MS - TOTAL_DELAY_MS) / 2))
 
 void setup()
 {
@@ -96,7 +131,7 @@ void setup()
   pinMode(MOTOR_IN1_PIN, OUTPUT);
   pinMode(MOTOR_IN2_PIN, OUTPUT);
 
-#ifdef LCD
+#ifdef _LCD
   lcd.begin(LCD_COLUMNS, LCD_ROWS);
 #endif
 
@@ -110,10 +145,31 @@ void setup()
 // read our values, drive motor, display output
 void loop()
 {
-  // only read new values once we switch directions
+  // cache our direction
   direction = DIRECTION;
-  if (direction == 0 && last_direction != direction)
-    readInputs();
+
+  // only read new values once we switch directions
+  if (last_direction != direction)
+  {
+    // begin cycle
+    if (direction == 0)
+    {
+      readInputs();
+#if DELAY_PRE_CYCLE_MS
+      stopMotor();
+      delay(DELAY_PRE_CYCLE_MS);
+#endif
+    }
+
+    // return from other half cycle
+    else if (direction == 1)
+    {
+#if DELAY_MID_CYCLE_MS
+      stopMotor();
+      delay(DELAY_MID_CYCLE_MS);
+#endif
+    }
+  }
   last_direction = direction;
 
   driveMotor(speed, direction);
@@ -192,10 +248,16 @@ void driveMotor(uint8_t m_speed, bool m_direction)
   d(" direction=");
   d(direction);
   dln("driving motor");
-  
+
   analogWrite(MOTOR_ENABLE_PIN, m_speed);
   digitalWrite(MOTOR_IN1_PIN, !m_direction);
   digitalWrite(MOTOR_IN2_PIN,  m_direction);
+}
+
+// stop motor
+void stopMotor()
+{
+  analogWrite(MOTOR_ENABLE_PIN, 0);
 }
 
 ///////////////////////////////////////////////
@@ -204,7 +266,7 @@ void driveMotor(uint8_t m_speed, bool m_direction)
 // clear lcd
 void lcdClear()
 {
-#ifdef LCD
+#ifdef _LCD
   lcd.clear();
 #endif
 }
@@ -212,7 +274,7 @@ void lcdClear()
 // default to first column and row
 void lcdPrint(char *buf)
 {
-#ifdef LCD
+#ifdef _LCD
   lcdPrint(0, 0, buf);
 #endif
 }
@@ -220,7 +282,7 @@ void lcdPrint(char *buf)
 // print to column and row
 void lcdPrint(uint8_t col, uint8_t row, char *buf)
 {
-#ifdef LCD
+#ifdef _LCD
   lcd.setCursor(col, row);
   lcd.print(buf);
 #endif
@@ -229,7 +291,7 @@ void lcdPrint(uint8_t col, uint8_t row, char *buf)
 // default to first column
 void lcdPrint(uint8_t row, char *buf)
 {
-#ifdef LCD
+#ifdef _LCD
   lcd.setCursor(0, row);
   lcd.print(buf);
 #endif
