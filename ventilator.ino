@@ -10,16 +10,15 @@ Supports most low cost MCUs (Arduino Uno, Nano, Mega, Teensy, etc)
 2020/03/20
 
 TODO:
-- should there be a delay before actuating?
-- should there be a delay after actuating?
+- support diff delay between forward and reverse actuating
 - support duty cycle of motor
 - schematic
 - resolve any warnings
 
 */
 
-#define LCD // enable LCD
-//#define LCD_I2C // enable I2C LCD
+//#define LCD // enable LCD
+#define LCD_I2C // enable I2C LCD
 
 //#define DEBUG // enable serial debugging
 #define SERIAL_SPEED 9600
@@ -70,8 +69,10 @@ TODO:
 // these must be the same right now unfortunately...
 // need to add support for actually returning at
 // the right speed when coming back if diff speeds
-#define DELAY_PRE_CYCLE_MS DELAY_PER_CYCLE_MS // milliseconds to wait before actuating forward
-#define DELAY_MID_CYCLE_MS DELAY_PER_CYCLE_MS // milliseconds to wait before actuating in reverse
+//#define DELAY_PRE_CYCLE_MS DELAY_PER_CYCLE_MS // milliseconds to wait before actuating forward
+//#define DELAY_MID_CYCLE_MS DELAY_PER_CYCLE_MS // milliseconds to wait before actuating in reverse
+#define DELAY_PRE_CYCLE_MS 1000 // milliseconds to wait before actuating forward
+#define DELAY_MID_CYCLE_MS 10 // milliseconds to wait before actuating in reverse
 
 #if defined(LCD) && defined(LCD_I2C)
 #error "define either LCD, LCD_I2C, or neither"
@@ -85,13 +86,12 @@ TODO:
 #define dln(...) (void)0
 #endif
 
-#ifdef LCD
+#if defined(LCD)
 #define _LCD
 #include <LiquidCrystal.h>
 LiquidCrystal lcd(LCD_RS, LCD_EN, LCD_D4, LCD_D5, LCD_D6, LCD_D7);
-#endif
 
-#ifdef LCD_I2C
+#elif defined(LCD_I2C)
 #define _LCD
 #include <Wire.h>
 #include <LiquidCrystal_I2C.h>
@@ -132,7 +132,15 @@ void setup()
   pinMode(MOTOR_IN2_PIN, OUTPUT);
 
 #ifdef _LCD
+  // try to support LiquidCrystal_I2C libs from F Malpartida, Frank de Brabander, Marco Schwartz, ejoyneering, Tony Kambourakis (platformio 136, 576, 1574, 6158)
+#if defined(LiquidCrystal_i2c_h) // if using 6158 by ejoyneering
   lcd.begin(LCD_COLUMNS, LCD_ROWS);
+#elif defined(LiquidCrystal_4bit_h) // 136
+  lcd.begin(LCD_COLUMNS, LCD_ROWS);
+#else
+  lcd.begin(LCD_COLUMNS, LCD_ROWS, LCD_5x8DOTS);
+#endif
+
 #endif
 
   lcdClear();
@@ -243,11 +251,10 @@ long analogMap(long input, long from, long to)
 // drive our motor, L293D or similar
 void driveMotor(uint8_t m_speed, bool m_direction)
 {
-  d("speed=");
+  d("driving motor speed=");
   d(m_speed);
   d(" direction=");
-  d(direction);
-  dln("driving motor");
+  dln(direction);
 
   analogWrite(MOTOR_ENABLE_PIN, m_speed);
   digitalWrite(MOTOR_IN1_PIN, !m_direction);
@@ -257,6 +264,7 @@ void driveMotor(uint8_t m_speed, bool m_direction)
 // stop motor
 void stopMotor()
 {
+  d("stop motor");
   analogWrite(MOTOR_ENABLE_PIN, 0);
 }
 
