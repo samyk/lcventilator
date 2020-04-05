@@ -30,7 +30,6 @@
 /////////////////////////////
 ////     VALUES
 /////////////////////////////
-#define DELAY_PER_CYCLE_MS  0 // milliseconds to delay before actuating forward and reverse
 #define MAX_CYCLES_PER_MIN 40 // max full actuations (fwd+back) per minute
 #define MIN_CYCLES_PER_MIN  1 // minimum actuations per minute
 #define LCD_COLUMNS 16
@@ -50,11 +49,6 @@
 #define MIN_ANALOG_VALUE    0
 #define MAX_ANALOG_VALUE 1023
 
-// these must be the same right now unfortunately...
-// need to add support for actually returning at
-// the right speed when coming back if diff speeds
-//#define DELAY_PRE_CYCLE_MS DELAY_PER_CYCLE_MS // milliseconds to wait before actuating forward
-//#define DELAY_MID_CYCLE_MS DELAY_PER_CYCLE_MS // milliseconds to wait before actuating in reverse
 #define DELAY_PRE_CYCLE_MS 10 // milliseconds to wait before actuating forward
 #define DELAY_MID_CYCLE_MS 10 // milliseconds to wait before actuating in reverse
 
