@@ -1,6 +1,6 @@
 #include "config.h"
 #include "simulate.h"
-#include "ventilator.h"
+#include "lcventilator.h"
 
 ///////////////////////////////////////////////////////////////
 // simulation helpers

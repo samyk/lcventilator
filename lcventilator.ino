@@ -16,13 +16,13 @@ TODO:
 - resolve any warnings
 
 to simulate:
-  g++ -DSIMULATE *.cpp -o ventilator
+  g++ -DSIMULATE *.cpp *.ino -o lcventilator
 
 */
 
 // change settings in config.h
 #include "config.h"
-#include "ventilator.h"
+#include "lcventilator.h"
 #include "simulate.h"
 
 ///////////////////////////////////////////////////////////////////////
@@ -212,7 +212,7 @@ void setup()
 
 #ifdef _LCD
   // try to support LiquidCrystal_I2C libs from F Malpartida, Frank de Brabander, Marco Schwartz, ejoyneering, Tony Kambourakis (platformio 136, 576, 1574, 6158)
-#if defined(LiquidCrystal_i2c_h) // if using 6158 by ejoyneering
+#if defined(LiquidCrystal_i2c_h) // if using 6158 by ejoyneering - this conflicts with 576
   lcd.begin(LCD_COLUMNS, LCD_ROWS);
 #elif defined(LiquidCrystal_4bit_h) // 136
   lcd.begin(LCD_COLUMNS, LCD_ROWS);

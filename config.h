@@ -1,8 +1,8 @@
 #ifndef _CONFIG_H
 #define _CONFIG_H
 
-#define LCD // enable LCD
-//#define LCD_I2C // enable I2C LCD
+//#define LCD // enable LCD
+#define LCD_I2C // enable I2C LCD
 
 #define DEBUG // enable serial debugging
 #define SERIAL_SPEED 9600
